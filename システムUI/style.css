@@ -1,0 +1,143 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Arial', sans-serif;
+}
+
+body {
+    background: #f4f6f8;
+    color: #333;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* ナビバー */
+header {
+    background: #39bdec;
+    color: white;
+}
+
+.navbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px 20px;
+    position: relative;
+}
+
+.logo {
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.nav-links {
+    display: flex;
+    gap: 20px;
+}
+
+.nav-links a {
+    color: white;
+    text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.logout {
+    color: #ff6b6b;
+    font-weight: bold;
+}
+
+.hamburger {
+    display: none;
+    font-size: 1.6rem;
+    cursor: pointer;
+}
+
+/* メイン中央配置 */
+main {
+    flex: 1;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 20px;
+}
+
+.dashboard {
+    display: grid;
+    grid-template-columns: repeat(2, 450px);
+    grid-template-rows: repeat(2, 250px);
+    gap: 50px;
+    justify-content: center;
+    align-content: center;
+}
+
+/* カード  */
+.card {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    background: white;
+    border-radius: 20px;
+    text-decoration: none;
+    color: white;
+    font-weight: bold;
+    box-shadow: 0 8px 18px rgba(0,0,0,0.15);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card:hover {
+    transform: translateY(-6px);
+    box-shadow: 0 14px 28px rgba(0,0,0,0.25);
+}
+
+/* 色分け */
+.driver-card { background: #3498db; }
+.bus-card { background: #e67e22; }
+.document-card { background: #2ecc71; }
+.dispatch-card { background: #9b59b6; }
+
+.icon {
+    font-size: 3.2rem;
+    margin-bottom: 15px;
+}
+
+/* フッター */
+footer {
+    background: #39bdec;
+    color: white;
+    text-align: center;
+    padding: 12px 0;
+    font-size: 0.9rem;
+    margin-top: auto;
+}
+
+/*  レスポンシブ  */
+@media (max-width: 768px) {
+    .hamburger { display: block; }
+    .nav-links {
+        display: none;
+        flex-direction: column;
+        position: absolute;
+        top: 60px;
+        right: 20px;
+        background: #39bdec;
+        padding: 12px;
+        border-radius: 8px;
+        gap: 12px;
+        min-width: 180px;
+    }
+    .nav-links.active { display: flex; }
+    .dashboard {
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+    }
+    .card {
+        height: 200px;
+        width: 90%;
+        margin: 0 auto;
+    }
+}
+
+

@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ドライバー詳細</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- ヘッダー -->
+  <header>
+    <div class="navbar">
+      <a href="index.html" class="logo"><i class="fas fa-bus"></i></a>
+      <nav class="nav-links" id="navLinks">
+        <a href="#">・遷移先１</a>
+        <a href="#">・遷移先２</a>
+        <a href="#">・遷移先３</a>
+        <a href="#">・遷移先４</a>
+        <a href="#">・遷移先５</a>
+        <a href="#" class="logout"><i class="fas fa-sign-out-alt"></i> ログアウト</a>
+      </nav>
+      <div class="hamburger" id="hamburger"><i class="fas fa-bars"></i></div>
+    </div>
+  </header>
+
+  <!-- メイン -->
+  <main class="driver-detail-page">
+    <div id="driverProfile" class="detail-card">
+      <p>読み込み中...</p>
+    </div>
+  </main>
+
+  <!-- フッター -->
+  <footer>
+    <p>© 2025 運行管理システム | All Rights Reserved</p>
+  </footer>
+
+  <script>
+    // ハンバーガーメニュー
+    const hamburger = document.getElementById("hamburger");
+    const navLinks = document.getElementById("navLinks");
+    hamburger.addEventListener("click", () => {
+      navLinks.classList.toggle("active");
+    });
+
+    // 疑似データ（本来はDB/APIから取得）
+    const driverData = {
+      "001": {
+        id: "001",
+        name: "山田 太郎",
+        age: 45,
+        license: "大型二種",
+        health: "良好",
+        photo: "https://via.placeholder.com/120",
+        work: ["2025-09-10: 早番・市内便", "2025-09-09: 夜勤・空港便", "2025-09-08: 日勤・高速便"],
+        check: "血圧：正常、体温：36.5℃、異常なし"
+      },
+      "002": {
+        id: "002",
+        name: "佐藤 花子",
+        age: 38,
+        license: "大型二種",
+        health: "要再検査",
+        photo: "https://via.placeholder.com/120",
+        work: ["2025-09-11: 日勤・観光便", "2025-09-09: 夜勤・高速便"],
+        check: "血圧：やや高め、体温：36.8℃、要経過観察"
+      },
+      "003": {
+        id: "003",
+        name: "田中 一郎",
+        age: 50,
+        license: "中型二種",
+        health: "良好",
+        photo: "https://via.placeholder.com/120",
+        work: ["2025-09-10: 夜勤・市内便", "2025-09-08: 日勤・高速便"],
+        check: "血圧：正常、体温：36.4℃、異常なし"
+      }
+    };
+
+    // URLからid取得
+    const params = new URLSearchParams(window.location.search);
+    const driverId = params.get("id");
+
+    const profile = document.getElementById("driverProfile");
+
+    if (driverId && driverData[driverId]) {
+      const d = driverData[driverId];
+      profile.innerHTML = `
+        <img src="${d.photo}" alt="${d.name}">
+        <h2>${d.name}</h2>
+        <p><strong>ID:</strong> ${d.id}</p>
+        <p><strong>年齢:</strong> ${d.age}</p>
+        <p><strong>免許種類:</strong> ${d.license}</p>
+        <p><strong>健康状態:</strong> ${d.health}</p>
+
+        <div class="detail-section">
+          <h3>📅 最近の勤務履歴</h3>
+          <ul>${d.work.map(w => `<li>${w}</li>`).join("")}</ul>
+        </div>
+
+        <div class="detail-section">
+          <h3>🩺 健康チェック結果</h3>
+          <p>${d.check}</p>
+        </div>
+
+        <a href="driver-list.html" class="back-btn">← 一覧に戻る</a>
+      `;
+    } else {
+      profile.innerHTML = "<p>該当するドライバー情報が見つかりません。</p>";
+    }
+  </script>
+</body>
+</html>
