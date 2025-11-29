@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>ドライバー情報一覧</title>
+
+  <!-- 既存CSS（そのまま） -->
+  <link rel="stylesheet" href="../../CSS/layout-staff.css">
+  <link rel="stylesheet" href="../../CSS/driver-list.css">
+
+  <!-- 任意：アイコン（既存に合わせて） -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+</head>
+<body>
+  <!-- ヘッダー（既存） -->
+  <header>
+    <div class="navbar">
+      <div class="logo">運行管理システム：所属ドライバーリスト</div>
+      <nav class="nav-links" id="navLinks">
+        <a href="#">・ログイン者情報</a>
+        <a href="#" class="logout"><i class="fas fa-sign-out-alt"></i> ログアウト</a>
+      </nav>
+      <div class="hamburger" id="hamburger">
+        <i class="fas fa-bars"></i>
+      </div>
+    </div>
+  </header>
+
+  <!-- 検索/ソート/追加（既存UI） -->
+  <div class="toolbar">
+    <div class="toolbar-left">
+      <input type="text" id="searchBox" placeholder="名前で検索">
+      <select id="sortBox">
+        <option value="name">名前順</option>
+        <option value="age">年齢順</option>
+      </select>
+    </div>
+    <div class="toolbar-right">
+      <button id="addDriverBtn"><i class="fas fa-plus"></i> 新規ドライバー追加</button>
+    </div>
+  </div>
+
+  <!-- メイン2カラム（既存） -->
+  <main class="driver-layout">
+    <!-- 左：一覧テーブル -->
+    <div class="table-container">
+      <table id="driverTable">
+        <thead>
+          <tr>
+            <th>写真</th>
+            <th>ID</th>
+            <th>名前</th>
+            <th>年齢</th>
+            <th>免許種類</th>
+            <th>健康状態</th>
+          </tr>
+        </thead>
+        <tbody>
+          <!-- FirestoreからJSで描画 -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- 右：選択詳細（既存） -->
+    <aside class="driver-detail" id="driverDetail">
+      <p>左の一覧からドライバーを選択してください。</p>
+    </aside>
+  </main>
+
+  <!-- 戻る（既存） -->
+  <div class="back-btn">
+    <button onclick="location.href='../../index-staff.html'">
+      <i class="fas fa-arrow-left"></i> 戻る
+    </button>
+  </div>
+
+  <footer>
+    <p>© 2025 プロジェクト演習D,E：A08 | All Rights Reserved</p>
+  </footer>
+
+  <!-- Firestore読込（type=module） -->
+  <script type="module">
+    // ====== ハンバーガーメニュー（既存） ======
+    const hamburger = document.getElementById("hamburger");
+    const navLinks = document.getElementById("navLinks");
+    hamburger.addEventListener("click", () => {
+      navLinks.classList.toggle("active");
+    });
+
+    // ====== Firebase SDK ======
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC7AK6I_KmkFEZIaWJokO5HN1UnejpHZ3U",
+      authDomain: "the-bus-94fe3.firebaseapp.com",
+      projectId: "the-bus-94fe3",
+      storageBucket: "the-bus-94fe3.appspot.com",
+      messagingSenderId: "782387450057",
+      appId: "1:782387450057:web:d6d4dcf0fd778ff6533d18"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db  = getFirestore(app);
+
+    // ====== 要素参照 ======
+    const tbody       = document.querySelector("#driverTable tbody");
+    const detailBox   = document.getElementById("driverDetail");
+    const searchBox   = document.getElementById("searchBox");
+    const sortBox     = document.getElementById("sortBox");
+    const addDriverBtn= document.getElementById("addDriverBtn");
+
+    // 画像プレースホルダ
+    const PLACEHOLDER_IMG = "https://via.placeholder.com/60?text=%20";
+
+    // クライアントキャッシュ（検索・ソート用）
+    let rowsCache = []; // {id, name, age, licenseText, health, photo, docId}
+
+    // ---- ユーティリティ：birthDate → 年齢計算 ----
+    function calcAgeFromBirth(birth) {
+      // Firestore Timestamp / Date / 文字列 どれでも対応
+      let d;
+      if (!birth) return null;
+      if (typeof birth.toDate === "function") {
+        d = birth.toDate();
+      } else if (birth instanceof Date) {
+        d = birth;
+      } else if (typeof birth === "string") {
+        // 文字列の場合は Date.parse に任せる（パース不可はnull）
+        const t = Date.parse(birth);
+        if (Number.isNaN(t)) return null;
+        d = new Date(t);
+      } else {
+        return null;
+      }
+      const today = new Date();
+      let age = today.getFullYear() - d.getFullYear();
+      const m = today.getMonth() - d.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+      return age >= 0 && age < 130 ? age : null;
+    }
+
+    // ---- Firestoreからdrivers読込 ----
+    async function loadDrivers() {
+      let qRef;
+      try {
+        qRef = query(collection(db, "drivers"), orderBy("name"));
+      } catch (e) {
+        // インデックス未設定時などは素直に全部取得
+        qRef = collection(db, "drivers");
+      }
+
+      const snap = await getDocs(qRef);
+      rowsCache = [];
+
+      snap.forEach(doc => {
+        const d = doc.data() || {};
+
+        // フィールドのマッピング（あなたの実データ構成に合わせる）
+        const id       = d.driverId || doc.id || "";
+        const name     = d.name || "不明";
+        const age      = calcAgeFromBirth(d.birthDate); // null の可能性あり
+        const licenses = Array.isArray(d.licenseTypes) ? d.licenseTypes : (d.licenseTypes ? [String(d.licenseTypes)] : []);
+        const licenseText = licenses.length ? licenses.join("、") : "不明";
+        const health   = d.healthSummary || "不明";
+        const photo    = d.photoUrl || PLACEHOLDER_IMG;
+
+        rowsCache.push({
+          id, name,
+          age: (typeof age === "number" ? age : "N/A"),
+          licenseText, health, photo,
+          docId: doc.id
+        });
+      });
+
+      renderTable(rowsCache);
+      bindRowClicks();
+    }
+
+    // ---- テーブル描画 ----
+    function renderTable(list) {
+      tbody.innerHTML = "";
+      list.forEach(item => {
+        const tr = document.createElement("tr");
+        tr.setAttribute("data-detail", JSON.stringify({
+          id: item.id,
+          name: item.name,
+          age: String(item.age),
+          licenseText: item.licenseText,
+          health: item.health,
+          photo: item.photo
+        }));
+        tr.innerHTML = `
+          <td><img src="${item.photo || PLACEHOLDER_IMG}" alt="${item.name}" width="60" height="60" style="object-fit:cover;border-radius:6px;"></td>
+          <td>${item.id}</td>
+          <td>${item.name}</td>
+          <td>${item.age}</td>
+          <td>${item.licenseText}</td>
+          <td>${item.health}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // ---- 行クリックで右の詳細パネル更新 ----
+    function bindRowClicks() {
+      document.querySelectorAll("#driverTable tbody tr").forEach(row => {
+        row.addEventListener("click", () => {
+          const d = JSON.parse(row.getAttribute("data-detail"));
+          detailBox.innerHTML = `
+            <img src="${d.photo || PLACEHOLDER_IMG}" alt="${d.name}">
+            <h3>${d.name}（ID: ${d.id || "N/A"}）</h3>
+            <p>年齢: ${d.age || "N/A"}</p>
+            <p>免許種類: ${d.licenseText || "不明"}</p>
+            <p>健康状態: ${d.health || "不明"}</p>
+            <button onclick="location.href='driver_detail.html?id=${encodeURIComponent(d.id || "")}'">詳細ページへ</button>
+          `;
+        });
+      });
+    }
+
+    // ---- 検索（名前） ----
+    searchBox.addEventListener("keyup", () => {
+      const kw = searchBox.value.toLowerCase();
+      const filtered = rowsCache.filter(r => (r.name || "").toLowerCase().includes(kw));
+      renderTable(filtered);
+      bindRowClicks();
+    });
+
+    // ---- ソート（名前/年齢）----
+    sortBox.addEventListener("change", () => {
+      const v = sortBox.value;
+      const sorted = [...rowsCache].sort((a, b) => {
+        if (v === "name") {
+          return (a.name || "").localeCompare(b.name || "");
+        } else if (v === "age") {
+          const an = (typeof a.age === "number") ? a.age : -1;
+          const bn = (typeof b.age === "number") ? b.age : -1;
+          return an - bn;
+        }
+        return 0;
+      });
+      renderTable(sorted);
+      bindRowClicks();
+    });
+
+    // ---- 新規追加（遷移先は必要に応じて差し替え） ----
+    addDriverBtn.addEventListener("click", () => {
+      location.href = "driver_add.html";
+    });
+
+    // 初回ロード
+    loadDrivers();
+  </script>
+</body>
+</html>
+
+

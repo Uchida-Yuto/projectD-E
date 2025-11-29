@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>バス位置情報管理</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  :root{ --border:#e5e7eb; --hover:#eff6ff; --brand:#2563eb; --muted:#6b7280; }
+  html,body{ height:100%; }
+  body{ font-family:system-ui,-apple-system,Segoe UI,Roboto,"Noto Sans JP",sans-serif; margin:0; background:#f9fafb; color:#111827; }
+  header{ background:#fff; border-bottom:1px solid var(--border); padding:12px 16px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap }
+  h1{ margin:0; font-size:1.1rem; }
+  .toolbar{ display:flex; gap:6px; flex-wrap:wrap; align-items:center }
+  input,button{ padding:6px 10px; border-radius:8px; border:1px solid var(--border); font-size:14px; }
+  button{ background:var(--brand); color:#fff; border:none; cursor:pointer; }
+  button.ghost{ background:#fff; color:#111827; border:1px solid var(--border) }
+  .mini{ font-size:12px; color:#6b7280 }
+  .container{ display:grid; grid-template-columns:2fr 1fr; gap:10px; padding:10px; height:calc(100vh - 70px); box-sizing:border-box; }
+  .card{ background:#fff; border:1px solid var(--border); border-radius:10px; padding:10px; box-shadow:0 2px 6px rgba(0,0,0,0.05); display:flex; flex-direction:column; }
+  #map{ height:100%; width:100%; border-radius:10px; border:1px solid var(--border); }
+  table{ width:100%; border-collapse:collapse; }
+  th,td{ padding:8px; border-bottom:1px solid #f0f0f0; text-align:left; font-size:14px; vertical-align:top; }
+  th{ color:#6b7280; }
+  tr:hover{ background:var(--hover); cursor:pointer; }
+  .row-selected{ background:#eef2ff; }
+  .delay-ok{ color:#059669; font-weight:600; }
+  .delay-warn{ color:#d97706; font-weight:600; }
+  .delay-bad{ color:#dc2626; font-weight:700; }
+  .nowrap{ white-space:nowrap; }
+  .dim{ color:#6b7280; font-size:12px; }
+  @media (max-width: 900px){
+    .container{ grid-template-columns:1fr; grid-auto-rows:minmax(300px, auto); }
+    #map{ height:60vh; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>運行ダッシュボード</h1>
+  <div class="toolbar">
+    <input id="q" type="search" placeholder="検索: 名前 / 便名 / UID" />
+    <input id="date" type="date" />
+    <button id="btnShow" class="ghost">選択ドライバーのルート&距離</button>
+    <button id="btnSave" class="ghost">この日の結果を履歴保存</button>
+    <button id="btnShowAll" class="ghost">全員表示</button>
+    <span class="mini" id="distance"></span>
+  </div>
+</header>
+
+<main class="container">
+  <section class="card">
+    <div id="map"></div>
+  </section>
+  <section class="card">
+    <div style="overflow:auto; flex:1;">
+      <table>
+        <thead>
+          <tr>
+            <th>名前</th>
+            <th>便名</th>
+            <th>次の停留所</th>
+            <th>到着予定時間</th>
+            <th>遅延</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+  import {
+    getFirestore, collection, doc, getDoc, setDoc, query, onSnapshot,
+    orderBy, getDocs, where, serverTimestamp, limit
+  } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+  // ==== Firebase ====
+  const firebaseConfig = {
+    apiKey: "AIzaSyC7AK6I_KmkFEZIaWJokO5HN1UnejpHZ3U",
+    authDomain: "the-bus-94fe3.firebaseapp.com",
+    projectId: "the-bus-94fe3",
+    storageBucket: "the-bus-94fe3.firebasestorage.app",
+    messagingSenderId: "782387450057",
+    appId: "1:782387450057:web:d6d4dcf0fd778ff6533d18",
+    measurementId: "G-D9627JEYQ6"
+  };
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  let map = L.map('map').setView([35.3942,139.4661], 12);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19, attribution:'© OpenStreetMap'}).addTo(map);
+
+  const busIcon = L.icon({
+    iconUrl:
+      'data:image/svg+xml;utf8,' +
+      encodeURIComponent(`
+        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32">
+          <g fill="none" stroke="#1f2937" stroke-width="1.2">
+            <rect x="5" y="6" width="22" height="16" rx="3" ry="3" fill="#2563eb"/>
+            <rect x="7.5" y="8.5" width="17" height="7" rx="1.5" ry="1.5" fill="#e5efff"/>
+            <circle cx="11" cy="24" r="3" fill="#111827"/>
+            <circle cx="21" cy="24" r="3" fill="#111827"/>
+            <rect x="6" y="17.5" width="20" height="3" rx="1.5" ry="1.5" fill="#1d4ed8"/>
+          </g>
+        </svg>
+      `),
+    iconSize: [32,32],
+    iconAnchor: [16,28],
+    popupAnchor: [0,-26]
+  });
+
+  const markers = new Map();
+  let selectedUid = null;
+  let routeLayer = null;
+
+  const qInput = document.getElementById('q');
+  const dateInput = document.getElementById('date');
+  const btnShow = document.getElementById('btnShow');
+  const btnSave = document.getElementById('btnSave');
+  const btnShowAll = document.getElementById('btnShowAll');
+  const distanceEl = document.getElementById('distance');
+  const tbody = document.getElementById('tbody');
+
+  let liveCache = [];
+
+  const nameCache = new Map(); // uid -> name
+  async function resolveName(uid){
+    if(nameCache.has(uid)) return nameCache.get(uid);
+    const qAcc = query(collection(db, 'accounts'), where('uid','==',uid), limit(1));
+    const snap = await getDocs(qAcc);
+    const name = snap.empty ? '' : (snap.docs[0].data().name || '');
+    nameCache.set(uid, name);
+    updatePopupFor(uid);
+    renderList();
+    return name;
+  }
+  const getDisplayName = uid => (nameCache.get(uid) || '');
+
+  function ensureMarker(id){
+    if(!markers.has(id)){
+      const m = L.marker([0,0], { icon: busIcon });
+      markers.set(id,m);
+    }
+    return markers.get(id);
+  }
+
+  function displayStopName(v){
+    return v?.currentStopName || v?.nextStop?.name || '-';
+  }
+
+  function displayEta(v){
+    const eta = v?.nextStop?.eta?.seconds
+      ? new Date(v.nextStop.eta.seconds*1000)
+      : (v?.nextStop?.eta ? new Date(v.nextStop.eta) : null);
+    return eta ? eta.toLocaleTimeString('ja-JP',{hour12:false}) : '-';
+  }
+
+  function delayClass(min){
+    if(min==null) return '';
+    if(min >= 10) return 'delay-bad';
+    if(min >= 5)  return 'delay-warn';
+    return 'delay-ok';
+  }
+
+  function updatePopupFor(uid){
+    const v = liveCache.find(x=>x.uid===uid);
+    if(!v) return;
+    const m = markers.get(uid);
+    if(!m) return;
+
+    const nm = getDisplayName(uid) || v.email || uid;
+    const stopLine = displayStopName(v);
+    const etaStr = displayEta(v);
+    const delayStr = (v.delayMinutes!=null) ? `${v.delayMinutes}分` : '-';
+    const t = v.updatedAt?.seconds ? new Date(v.updatedAt.seconds*1000).toLocaleString('ja-JP') : '-';
+    const route = v.routeName || '-';
+
+    m.bindPopup(
+      `<strong>${nm}</strong><br>`+
+      `便名：${route}<br>`+
+      `次の停留所：${stopLine}<br>`+
+      `到着予定：${etaStr}<br>`+
+      `遅延：${delayStr}<br>`+
+      `${t}`
+    );
+  }
+
+  function setMarker(v){
+    const id = v.uid, latlng=[v.lat,v.lng];
+    const m = ensureMarker(id);
+    m.setLatLng(latlng);
+
+    const shouldShow = !selectedUid || selectedUid === id;
+    if (shouldShow) {
+      if(!map.hasLayer(m)) m.addTo(map);
+    } else {
+      if(map.hasLayer(m)) map.removeLayer(m);
+    }
+
+    if(!nameCache.has(id)) resolveName(id).catch(console.error);
+    updatePopupFor(id);
+  }
+
+  function showAllMarkers(){
+    selectedUid = null;
+    markers.forEach(m => { if(!map.hasLayer(m)) m.addTo(map); });
+  }
+
+  function renderList(){
+    const q = (qInput.value||'').toLowerCase();
+    tbody.innerHTML = '';
+
+    liveCache.forEach(v=>{
+      if(!v || v.lat==null || v.lng==null) return;
+
+      const name = (getDisplayName(v.uid) || v.email || v.uid);
+      const route = v.routeName || '';
+      const searchText = `${name} ${route} ${v.uid}`.toLowerCase();
+      if(q && !searchText.includes(q)) return;
+
+      setMarker(v); // ← 可視制御は setMarker が担う
+
+      const tr = document.createElement('tr');
+      if(selectedUid === v.uid) tr.classList.add('row-selected');
+      tr.onclick = ()=>{
+        selectedUid = v.uid;
+        renderList();
+        const mk = markers.get(v.uid);
+        if(mk){ mk.addTo(map); mk.openPopup(); map.setView(mk.getLatLng(), Math.max(map.getZoom(), 14)); }
+      };
+
+      const stopName = displayStopName(v);
+      const etaStr = displayEta(v);
+      const delay = (v.delayMinutes!=null) ? Number(v.delayMinutes) : null;
+      const delayTxt = (delay==null) ? '-' : `${delay} 分`;
+
+      tr.innerHTML = `
+        <td>${name}</td>
+        <td>${route || '-'}</td>
+        <td>${stopName}</td>
+        <td class="nowrap">${etaStr}</td>
+        <td class="${delayClass(delay)}">${delayTxt}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  const liveCol = collection(db, "livePositions");
+  onSnapshot(query(liveCol), (snap)=>{
+    liveCache = [];
+    snap.forEach(docSnap=>{
+      const v = docSnap.data();
+      if(v) liveCache.push(v);
+    });
+    liveCache.forEach(v => { if(!nameCache.has(v.uid)) resolveName(v.uid).catch(console.error); });
+
+    renderList();
+  });
+
+  qInput.addEventListener('input', renderList);
+
+  const R=6371000, toRad=d=>d*Math.PI/180;
+  function haversine(a,b){
+    const dLat=toRad(b.lat-a.lat), dLng=toRad(b.lng-a.lng);
+    const s=Math.sin(dLat/2)**2+Math.cos(toRad(a.lat))*Math.cos(toRad(b.lat))*Math.sin(dLng/2)**2;
+    return 2*R*Math.asin(Math.sqrt(s));
+  }
+  function rdp(points, epsilonMeters=20){
+    if(points.length<=2) return points;
+    const epsilonRad = epsilonMeters / R;
+    const toXY = (p)=>({x: toRad(p.lng)*Math.cos(toRad(p.lat)), y: toRad(p.lat)});
+    const A = toXY(points[0]), B = toXY(points[points.length-1]);
+    let idx=-1, dmax=0;
+    for(let i=1;i<points.length-1;i++){
+      const P=toXY(points[i]);
+      const num = Math.abs((B.y-A.y)*P.x - (B.x-A.x)*P.y + B.x*A.y - B.y*A.x);
+      const den = Math.hypot(B.y-A.y, B.x-A.x) || 1e-9;
+      const d = num/den;
+      if(d>dmax){ dmax=d; idx=i; }
+    }
+    if(dmax>epsilonRad){
+      const left = rdp(points.slice(0, idx+1), epsilonMeters);
+      const right = rdp(points.slice(idx), epsilonMeters);
+      return left.slice(0,-1).concat(right);
+    }else{
+      return [points[0], points[points.length-1]];
+    }
+  }
+  async function loadOrCompute(uid, dateStr){
+    const dRef = doc(db, "drivers", uid, "daily", dateStr);
+    const saved = await getDoc(dRef);
+    if(saved.exists()){
+      const data = saved.data();
+      const coords = data?.line?.coordinates || [];
+      const pts = coords.map(([lng,lat])=>({lat,lng}));
+      drawRoute(pts);
+      distanceEl.textContent = typeof data?.distanceMeters==='number'
+        ? `選択日距離: ${(data.distanceMeters/1000).toFixed(2)} km（保存済）`
+        : `選択日距離: - （保存済）`;
+      return { points: pts, distanceM: data?.distanceMeters||0, saved:true };
+    }
+
+    const from = new Date(`${dateStr}T00:00:00+09:00`);
+    const to   = new Date(`${dateStr}T23:59:59.999+09:00`);
+    const posCol = collection(db, "drivers", uid, "positions");
+    const q1 = query(posCol, where('serverAt','>=', from), where('serverAt','<=', to), orderBy('serverAt','asc'));
+    const snap = await getDocs(q1);
+
+    const pts = [];
+    snap.forEach(d=>{
+      const x = d.data();
+      if(typeof x.lat==='number' && typeof x.lng==='number'){
+        if(x.accuracy==null || x.accuracy<=80) pts.push({lat:x.lat, lng:x.lng});
+      }
+    });
+
+    let distM = 0;
+    for(let i=1;i<pts.length;i++) distM += haversine(pts[i-1],pts[i]);
+
+    const simp = rdp(pts, 20);
+    drawRoute(simp);
+    distanceEl.textContent = `選択日距離: ${(distM/1000).toFixed(2)} km（推定/未保存）`;
+    return { points: simp, distanceM: Math.round(distM), saved:false };
+  }
+  let polyLayer=null;
+  function drawRoute(points){
+    if(polyLayer){ polyLayer.remove(); polyLayer=null; }
+    if(points.length>=2){
+      polyLayer = L.polyline(points.map(p=>[p.lat,p.lng]), {weight:4}).addTo(map);
+      map.fitBounds(polyLayer.getBounds(), {padding:[20,20]});
+    }
+  }
+
+  btnShow.onclick = async ()=>{
+    if(!selectedUid){ alert('一覧からドライバーを選択してください'); return; }
+    const dateStr = dateInput.value;
+    if(!dateStr){ alert('日付を選択してください'); return; }
+    await loadOrCompute(selectedUid, dateStr);
+  };
+  btnSave.onclick = async ()=>{
+    if(!selectedUid){ alert('一覧からドライバーを選択してください'); return; }
+    const dateStr = dateInput.value;
+    if(!dateStr){ alert('日付を選択してください'); return; }
+    const { points, distanceM } = await loadOrCompute(selectedUid, dateStr);
+    if(points.length < 2){ alert('この日はデータが足りません'); return; }
+    const line = { type:"LineString", coordinates: points.map(p=>[p.lng,p.lat]) };
+    await setDoc(doc(db, "drivers", selectedUid, "daily", dateStr), {
+      uid: selectedUid, date: dateStr, distanceMeters: distanceM, line,
+      updatedAt: serverTimestamp()
+    }, { merge:true });
+    distanceEl.textContent = `選択日距離: ${(distanceM/1000).toFixed(2)} km（保存済）`;
+    alert('保存しました');
+  };
+  btnShowAll.onclick = ()=>{
+    selectedUid = null;
+    markers.forEach(m => { if(!map.hasLayer(m)) m.addTo(map); });
+    renderList();
+    if(polyLayer){ polyLayer.remove(); polyLayer=null; }
+    distanceEl.textContent = '';
+  };
+</script>
+</body>
+</html>
+

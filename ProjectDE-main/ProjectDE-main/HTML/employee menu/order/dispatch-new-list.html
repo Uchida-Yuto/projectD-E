@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>お問い合わせフォーム</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="layout-driver.css">
+  <style>
+    body {
+      background-color: #f4f6f9;
+      font-family: 'Segoe UI', Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+    .contact-container {
+      max-width: 800px;
+      margin: 60px auto;
+      background: #fff;
+      border-radius: 10px;
+      padding: 40px 50px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.1);
+    }
+    h1 {
+      text-align: center;
+      font-size: 1.8rem;
+      margin-bottom: 8px;
+      color: #00796b;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+    label {
+      font-weight: bold;
+      margin-bottom: 5px;
+      display: block;
+    }
+    .required::before {
+      content: "必須";
+      color: #fff;
+      background: #d32f2f;
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      margin-right: 6px;
+      border-radius: 3px;
+    }
+    input, select, textarea {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+    }
+    textarea {
+      height: 120px;
+      resize: vertical;
+    }
+    .inline-group {
+      display: flex;
+      gap: 10px;
+    }
+    .inline-group input {
+      flex: 1;
+    }
+    .radio-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 5px;
+    }
+    .privacy-box {
+      background: #f7f7f7;
+      padding: 12px;
+      border-radius: 6px;
+      font-size: 0.9rem;
+    }
+    .submit-btn {
+      background-color: #00796b;
+      color: white;
+      padding: 12px;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: bold;
+      cursor: pointer;
+      margin-top: 10px;
+      transition: background 0.3s;
+    }
+    .submit-btn:hover {
+      background-color: #005f55;
+    }
+  </style>
+</head>
+<body>
+  <div class="contact-container">
+    <h1>新規依頼情報入力画面</h1>
+
+    <form id="contactForm">
+      <div>
+        <label class="required">会社名もしくは施設名</label>
+        <input type="text" name="company" required>
+      </div>
+
+      <div>
+        <label class="required">運行地域（都道府県）</label>
+        <select name="prefecture" required>
+          <option value="">選択してください</option>
+          <option>北海道</option>
+          <option>青森県</option>
+          <option>岩手県</option>
+          <option>宮城県</option>
+          <option>秋田県</option>
+          <option>山形県</option>
+          <option>福島県</option>
+          <option>茨城県</option>
+          <option>栃木県</option>
+          <option>群馬県</option>
+          <option>埼玉県</option>
+          <option>千葉県</option>
+          <option>東京都</option>
+          <option>神奈川県</option>
+          <option>新潟県</option>
+          <option>富山県</option>
+          <option>石川県</option>
+          <option>福井県</option>
+          <option>山梨県</option>
+          <option>長野県</option>
+          <option>岐阜県</option>
+          <option>静岡県</option>
+          <option>愛知県</option>
+          <option>三重県</option>
+          <option>滋賀県</option>
+          <option>京都府</option>
+          <option>大阪府</option>
+          <option>兵庫県</option>
+          <option>奈良県</option>
+          <option>和歌山県</option>
+          <option>鳥取県</option>
+          <option>島根県</option>
+          <option>岡山県</option>
+          <option>広島県</option>
+          <option>山口県</option>
+          <option>徳島県</option>
+          <option>香川県</option>
+          <option>愛媛県</option>
+          <option>高知県</option>
+          <option>福岡県</option>
+          <option>佐賀県</option>
+          <option>長崎県</option>
+          <option>熊本県</option>
+          <option>大分県</option>
+          <option>宮崎県</option>
+          <option>鹿児島県</option>
+          <option>沖縄県</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="required">運行地域（市区町村）</label>
+        <input type="text" name="city" required>
+      </div>
+
+      <div class="inline-group">
+        <div style="flex:1;">
+          <label class="required">氏名</label>
+          <input type="text" name="last_name" placeholder="姓" required>
+        </div>
+        <div style="flex:1;">
+          <label>&nbsp;</label>
+          <input type="text" name="first_name" placeholder="名" required>
+        </div>
+      </div>
+
+      <div class="inline-group">
+        <div style="flex:1;">
+          <label class="required">氏名（フリガナ）</label>
+          <input type="text" name="last_name_kana" placeholder="セイ" required>
+        </div>
+        <div style="flex:1;">
+          <label>&nbsp;</label>
+          <input type="text" name="first_name_kana" placeholder="メイ" required>
+        </div>
+      </div>
+
+      <div>
+        <label class="required">電話番号</label>
+        <input type="tel" name="tel" required>
+      </div>
+
+      <div>
+        <label class="required">メールアドレス</label>
+        <input type="email" name="email" required>
+      </div>
+
+      <div>
+        <label class="required">現在の運行状況</label>
+        <div class="radio-group">
+          <label><input type="radio" name="status" value="self" required> 自社で運行している</label>
+          <label><input type="radio" name="status" value="outsourced"> 他社に運行を委託している</label>
+          <label><input type="radio" name="status" value="none"> 現在は運行していない</label>
+        </div>
+      </div>
+
+      <div>
+        <label class="required">契約種別</label>
+        <select name="keiyaku" required>
+          <option value="">選択してください</option>
+          <option>幼稚園・保育園</option>
+          <option>スクールバス</option>
+          <option>習い事送迎</option>
+          <option>病院送迎</option>
+          <option>人工透析送迎</option>
+          <option>福祉・介護施設</option>
+          <option>従業員送迎</option>
+          <option>お客様送迎</option>
+          <option>自治体向け・コミュニティバス</option>
+        </select>
+      </div>
+
+      <div>
+        <label class="required">運行開始予定時期</label>
+        <input type="text" name="start" placeholder="例）2025年3月開始" required>
+      </div>
+
+      <div>
+        <label class="required">ご希望の運行時間</label>
+        <input type="text" name="time" placeholder="例）6:00～10:00、18:00～20:15" required>
+      </div>
+
+      <div>
+        <label class="required">備考欄</label>
+        <textarea name="message" placeholder="入力上限1000文字" required></textarea>
+      </div>
+
+      <div>
+        <label class="required">担当者</label>
+        <input type="text" name="tanntou" required>
+      </div>
+
+      <button type="submit" class="submit-btn">送信</button>
+    </form>
+  </div>
+
+  <!-- Firebase SDK -->
+  <script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+  import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyC7AK6I_KmkFEZIaWJokO5HN1UnejpHZ3U",
+    authDomain: "the-bus-94fe3.firebaseapp.com",
+    projectId: "the-bus-94fe3",
+    storageBucket: "the-bus-94fe3.appspot.com",
+    messagingSenderId: "782387450057",
+    appId: "1:782387450057:web:xxxxxxxxxxxxxxxx"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  document.getElementById('contactForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const form = e.target;
+
+    const data = {
+      company: form.company.value,
+      prefecture: form.prefecture.value,
+      city: form.city.value,
+      last_name: form.last_name.value,
+      first_name: form.first_name.value,
+      last_name_kana: form.last_name_kana.value,
+      first_name_kana: form.first_name_kana.value,
+      tel: form.tel.value,
+      email: form.email.value,
+
+      // 👇 status は明示的に取得
+      status: form.querySelector('input[name="status"]:checked')?.value || "",
+
+      // 👇 keiyaku も明示的に取得
+      keiyaku: form.querySelector('select[name="keiyaku"]').value,
+
+      start: form.start.value,
+      time: form.time.value,
+      message: form.message.value,
+      tanntou: form.tanntou.value,
+      createdAt: serverTimestamp()
+    };
+
+    try {
+      await addDoc(collection(db, "newRequests"), data);
+      alert("送信が完了しました。ありがとうございました！");
+      form.reset();
+    } catch (error) {
+      console.error("Error adding document: ", error);
+      alert("送信中にエラーが発生しました。");
+    }
+  });
+</script>
+</body>
+</html>
+
+
+
+

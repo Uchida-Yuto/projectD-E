@@ -1,0 +1,306 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>ドライバー運行画面</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+  body { margin:0; background:#f8fafc; font-family:system-ui, -apple-system, "Noto Sans JP", sans-serif; }
+  header { background:#0f172a; color:white; padding:10px; text-align:center; font-weight:bold; }
+  main { padding:10px; display:grid; gap:12px; }
+  .card { background:white; border-radius:14px; padding:12px; box-shadow:0 1px 4px rgba(0,0,0,0.08); }
+  select, button { width:100%; padding:14px; font-size:18px; border-radius:12px; border:1px solid #ccc; }
+  button.primary { background:#2563eb; color:white; border:none; }
+  button.danger  { background:#ef4444; color:white; border:none; }
+  #map { height:55vh; border-radius:12px; }
+  .hidden { display:none; }
+  .stopDisplay { font-size:20px; text-align:center; font-weight:bold; margin:10px 0; }
+  .navButtons { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .note { color:#64748b; font-size:12px; text-align:center; }
+</style>
+</head>
+<body>
+
+<header>ドライバー運行システム</header>
+
+<main>
+  <!-- 運行前の -->
+  <section id="setupSection" class="card">
+    <h3>ルート選択</h3>
+    <select id="routeSelect" disabled>
+      <option>ルートを取得中...</option>
+    </select>
+    <button id="btnStart" class="primary" disabled>運行開始</button>
+  </section>
+
+  <!-- 運行中の -->
+  <section id="driveSection" class="card hidden">
+    <div class="stopDisplay">
+      次の停留所：<span id="currentStop">-</span>
+    </div>
+    <div class="navButtons">
+      <button id="btnPrevStop">前の停留所へ</button>
+      <button id="btnNextStop">次の停留所へ</button>
+    </div>
+    <button id="btnStop" class="danger" style="margin-top:12px;">位置情報共有停止</button>
+  </section>
+
+  <section id="mapSection" class="card">
+    <div id="map"></div>
+  </section>
+</main>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+  import {
+    getFirestore, collection, query, where, getDocs, doc, setDoc, getDoc, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
+  // --- Firebase設定 ---
+  const firebaseConfig = {
+    apiKey: "AIzaSyC7AK6I_KmkFEZIaWJokO5HN1UnejpHZ3U",
+    authDomain: "the-bus-94fe3.firebaseapp.com",
+    projectId: "the-bus-94fe3",
+    storageBucket: "the-bus-94fe3.firebasestorage.app",
+    messagingSenderId: "782387450057",
+    appId: "1:782387450057:web:d6d4dcf0fd778ff6533d18",
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  const routeSelect = document.getElementById("routeSelect");
+  const btnStart = document.getElementById("btnStart");
+  const btnStop = document.getElementById("btnStop");
+  const btnNextStop = document.getElementById("btnNextStop");
+  const btnPrevStop = document.getElementById("btnPrevStop");
+  const currentStopEl = document.getElementById("currentStop");
+
+  const setupSection = document.getElementById("setupSection");
+  const driveSection = document.getElementById("driveSection");
+  const mapSection = document.getElementById("mapSection");
+
+  let map = L.map("map").setView([35.68,139.76], 13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{maxZoom:19}).addTo(map);
+  let marker;
+
+  let user = null;
+  let myRoutes = [];
+  let activeRoute = null;
+  let currentStopIndex = 0;
+  let watchId = null;
+  let lastWriteAt = 0;
+  const MIN_WRITE_INTERVAL_MS = 3500;
+
+  const toDate = (v)=> v?.toDate ? v.toDate() : (v ? new Date(v) : null);
+  const nowMs = ()=> Date.now();
+
+  function jstTimestampId(date = new Date()) {
+    const d = new Date(date.getTime() + 9*60*60*1000); // +9h
+    const pad = n => String(n).padStart(2,'0');
+    const yyyy = d.getUTCFullYear();
+    const MM   = pad(d.getUTCMonth()+1);
+    const dd   = pad(d.getUTCDate());
+    const HH   = pad(d.getUTCHours());
+    const mm   = pad(d.getUTCMinutes());
+    const ss   = pad(d.getUTCSeconds());
+    return `${yyyy}${MM}${dd}${HH}${mm}${ss}`;
+  }
+
+  onAuthStateChanged(auth, async (u)=>{
+    if(!u){
+      await signInAnonymously(auth);
+    }else{
+      user = u;
+      await loadRoutes();
+    }
+  });
+
+  async function loadRoutes(){
+    const q1 = query(collection(db,"routes"), where("uid","==", user.uid));
+    const snap = await getDocs(q1);
+    myRoutes = [];
+    snap.forEach(docSnap => myRoutes.push({ id:docSnap.id, ...docSnap.data() }));
+
+    myRoutes.sort((a,b)=>{
+      const as = toDate(a.serviceDate) ?? new Date(0);
+      const bs = toDate(b.serviceDate) ?? new Date(0);
+      if (as - bs !== 0) return as - bs;
+      const at = toDate(a.startTime) ?? new Date(0);
+      const bt = toDate(b.startTime) ?? new Date(0);
+      return at - bt;
+    });
+
+    refreshRouteSelect();
+  }
+
+  function refreshRouteSelect(){
+    routeSelect.innerHTML = "";
+    if(myRoutes.length===0){
+      routeSelect.innerHTML = "<option>該当ルートなし</option>";
+      routeSelect.disabled = true;
+      btnStart.disabled = true;
+      return;
+    }
+    myRoutes.forEach(r=>{
+      const opt=document.createElement("option");
+      const sd = toDate(r.serviceDate);
+      const st = toDate(r.startTime);
+      opt.value=r.id;
+      opt.textContent=`${r.routeName||"(無名)"} ／ ${sd?sd.toLocaleDateString('ja-JP'):''} ${st?st.toLocaleTimeString('ja-JP',{hour12:false}):''}`;
+      routeSelect.appendChild(opt);
+    });
+    routeSelect.disabled=false;
+    btnStart.disabled=false;
+
+    if (routeSelect.value) {
+      activeRoute = myRoutes.find(r=>r.id===routeSelect.value) || null;
+    }
+  }
+
+  routeSelect.addEventListener("change",()=>{
+    const id = routeSelect.value;
+    activeRoute = myRoutes.find(r=>r.id===id)||null;
+  });
+
+  function computeDelayMinutes(){
+    if(!activeRoute?.stops || activeRoute.stops.length===0) return 0;
+    const s = activeRoute.stops[currentStopIndex];
+    if(!s?.eta) return 0;
+    const eta = toDate(s.eta);
+    if(!eta) return 0;
+    const diffMin = Math.round((nowMs() - eta.getTime())/60000);
+    return Math.max(0, diffMin);
+  }
+
+  function getNextStopInfo(){
+    if(!activeRoute?.stops) return null;
+    const i = Math.min(currentStopIndex+1, activeRoute.stops.length-1);
+    const s = activeRoute.stops[i];
+    if(!s) return null;
+    return { name: s.name || null, eta: toDate(s.eta) || null };
+  }
+
+  async function writeLiveAndHistory(coords){
+    if(!user || !activeRoute) return;
+    const { latitude:lat, longitude:lng, accuracy, speed, heading } = coords;
+    const currentStopName = activeRoute.stops?.[currentStopIndex]?.name || null;
+    const delayMinutes = computeDelayMinutes();
+    const next = getNextStopInfo();
+
+    await setDoc(doc(db, "livePositions", user.uid), {
+      uid: user.uid,
+      email: user.email || null,
+      lat, lng, accuracy: accuracy ?? null, speed: speed ?? null, heading: heading ?? null,
+      updatedAt: serverTimestamp(),
+      routeId: activeRoute.routeId || activeRoute.id || null,
+      routeName: activeRoute.routeName || null,
+      currentStopName,
+      nextStop: next ? { name: next.name, eta: next.eta } : null,
+      delayMinutes
+    }, { merge: true });
+
+    const t = nowMs();
+    if (t - lastWriteAt >= MIN_WRITE_INTERVAL_MS) {
+      lastWriteAt = t;
+
+      const baseId = jstTimestampId(new Date());
+      let docId = baseId;
+      let ref   = doc(db, "drivers", user.uid, "positions", docId);
+
+      const snap = await getDoc(ref);
+      if (snap.exists()) {
+        const ms = String(new Date().getMilliseconds()).padStart(3,'0');
+        docId = `${baseId}${ms}`;
+        ref = doc(db, "drivers", user.uid, "positions", docId);
+      }
+
+      await setDoc(ref, {
+        uid: user.uid,
+        email: user.email || null,
+        lat, lng, accuracy: accuracy ?? null, speed: speed ?? null, heading: heading ?? null,
+        clientAt: new Date(),          // 端末時刻
+        serverAt: serverTimestamp(),   // サーバ時刻
+        routeId: activeRoute.routeId || activeRoute.id || null,
+        routeName: activeRoute.routeName || null,
+        currentStopName,
+        nextStopName: next?.name || null,
+        delayMinutes
+      });
+    }
+  }
+
+  btnStart.onclick=()=>{
+    const selectedId = routeSelect.value;
+    activeRoute = myRoutes.find(r=>r.id===selectedId)||null;
+    if(!activeRoute){ alert("ルートを選択してください"); return; }
+
+    setupSection.classList.add("hidden");
+    driveSection.classList.remove("hidden");
+    mapSection.classList.add("hidden");
+
+    currentStopIndex = 0;
+    currentStopEl.textContent = activeRoute.stops?.[0]?.name || "-";
+    lastWriteAt = 0;
+
+    watchId = navigator.geolocation.watchPosition(async pos=>{
+      const { latitude, longitude } = pos.coords;
+      if(!marker){ marker = L.marker([latitude, longitude]).addTo(map); }
+      else{ marker.setLatLng([latitude, longitude]); }
+
+      try { await writeLiveAndHistory(pos.coords); }
+      catch(e){ console.error("write error", e); }
+    }, err => alert("位置取得失敗: " + err.message),
+    { enableHighAccuracy: true, maximumAge: 5000, timeout: 15000 });
+  };
+
+  async function syncLiveOnly(){
+    if(!user || !activeRoute) return;
+    const currentStopName = activeRoute.stops?.[currentStopIndex]?.name || null;
+    const delayMinutes = computeDelayMinutes();
+    const next = getNextStopInfo();
+    await setDoc(doc(db, "livePositions", user.uid), {
+      uid: user.uid,
+      routeId: activeRoute.routeId || activeRoute.id || null,
+      routeName: activeRoute.routeName || null,
+      currentStopName,
+      nextStop: next ? { name: next.name, eta: next.eta } : null,
+      delayMinutes,
+      updatedAt: serverTimestamp()
+    }, { merge: true });
+  }
+
+  btnNextStop.onclick=async()=>{
+    if(!activeRoute?.stops) return;
+    if(currentStopIndex < activeRoute.stops.length-1){
+      currentStopIndex++;
+      currentStopEl.textContent = activeRoute.stops[currentStopIndex].name;
+      try { await syncLiveOnly(); } catch(e){ console.error(e); }
+    }
+  };
+  btnPrevStop.onclick=async()=>{
+    if(currentStopIndex>0){
+      currentStopIndex--;
+      currentStopEl.textContent = activeRoute.stops[currentStopIndex].name;
+      try { await syncLiveOnly(); } catch(e){ console.error(e); }
+    }
+  };
+
+  btnStop.onclick=()=>{
+    if(watchId){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+    setupSection.classList.remove("hidden");
+    driveSection.classList.add("hidden");
+    mapSection.classList.remove("hidden");
+  };
+</script>
+</body>
+</html>
+
+
+

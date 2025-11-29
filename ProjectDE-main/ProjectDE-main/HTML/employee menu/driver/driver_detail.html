@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>所属ドライバー詳細</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="../../CSS/layout-staff.css">
+  <link rel="stylesheet" href="../../CSS/driver-list.css">
+  <style>
+    main { flex: 1; padding: 20px; display: flex; flex-direction: column; align-items: center; }
+    .driver-detail-box { background:#fff; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,.1); display:flex; gap:40px; padding:30px; width:80%; max-width:900px; }
+    .image-area { flex:1; display:flex; justify-content:center; align-items:center; background:#f9f9f9; border-radius:8px; min-height:220px; overflow:hidden; }
+    .image-area p { font-weight:bold; color:#888; text-align:center; }
+    .image-area img { max-width:100%; max-height:260px; object-fit:cover; border-radius:8px; }
+    .info-area { flex:2; }
+    .info-area h2 { margin-bottom:10px; border-bottom:2px solid #1a7f6d; padding-bottom:5px; font-size:22px; }
+    .info-item { margin:8px 0; font-size:16px; }
+    .button { display:inline-flex; align-items:center; gap:6px; padding:10px 20px; font-weight:bold; border-radius:8px; border:none; text-decoration:none; cursor:pointer; transition:background-color .3s ease; }
+    .edit-button { background-color:#007bff; color:#fff; }
+    .edit-button:hover { background-color:#0056b3; }
+    .confirm-button { background-color:#28a745; color:#fff; margin-top:15px; display:inline-block; }
+    .confirm-button:hover { background-color:#218838; }
+    footer { text-align:center; color:#fff; margin-top:auto; }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="navbar">
+      <div class="logo">運行管理システム：ドライバー詳細</div>
+      <nav class="nav-links" id="navLinks">
+        <a href="././index-staff.html">・トップページ</a>
+        <a href="#">・ログイン者情報</a>
+        <a href="#" class="logout"><i class="fas fa-sign-out-alt"></i> ログアウト</a>
+      </nav>
+      <div class="hamburger" id="hamburger"><i class="fas fa-bars"></i></div>
+    </div>
+  </header>
+
+  <main>
+    <h1 class="section-title">所属ドライバー詳細</h1>
+
+    <div class="driver-detail-box">
+      <div class="image-area" id="imageArea">
+        <p id="noImageText">NO IMAGE</p>
+      </div>
+
+      <div class="info-area">
+        <h2>氏名：<span id="nameText">田中 太郎</span></h2>
+        <div class="info-item">ドライバーID：<span id="driverIdText">003</span></div>
+        <div class="info-item">年齢：<span id="ageText">45</span>歳</div>
+        <div class="info-item">電話番号：<span id="phoneText">090-1234-5678</span></div>
+        <div class="info-item">雇用形態：<span id="orgText">正社員</span></div>
+        <div class="info-item">免許情報：<span id="licenseText">大型二種</span></div>
+
+        <a href="#" class="button edit-button"><i class="fas fa-pen"></i> 編集</a>
+        <a href="driver-list.html" class="button confirm-button"><i class="fas fa-folder-open"></i> 提出書類確認</a>
+      </div>
+    </div>
+  </main>
+
+  <div class="back-btn">
+    <button onclick="history.back()"><i class="fas fa-arrow-left"></i> 戻る</button>
+  </div>
+
+  <footer>
+    <p>© 2025 プロジェクト演習D,E：A08 | All Rights Reserved</p>
+  </footer>
+
+  <script>
+    const hamburger = document.getElementById("hamburger");
+    const navLinks = document.getElementById("navLinks");
+    hamburger.addEventListener("click", () => navLinks.classList.toggle("active"));
+  </script>
+
+  <script type="module">
+    // ===== Firebase SDK (v10 modular) =====
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+    import { getFirestore, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-firestore.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyC7AK6I_KmkFEZIaWJokO5HN1UnejpHZ3U",
+      authDomain: "the-bus-94fe3.firebaseapp.com",
+      projectId: "the-bus-94fe3",
+      storageBucket: "the-bus-94fe3.firebasestorage.app",
+      messagingSenderId: "782387450057",
+      appId: "1:782387450057:web:d6d4dcf0fd778ff6533d18",
+      measurementId: "G-D9627JEYQ6"
+    };
+
+    initializeApp(firebaseConfig);
+    const db = getFirestore();
+
+    const nameEl     = document.getElementById("nameText");
+    const idEl       = document.getElementById("driverIdText");
+    const ageEl      = document.getElementById("ageText");
+    const phoneEl    = document.getElementById("phoneText");
+    const orgEl      = document.getElementById("orgText");
+    const licenseEl  = document.getElementById("licenseText");
+    const imageArea  = document.getElementById("imageArea");
+    const noImgText  = document.getElementById("noImageText");
+
+    function calcAge(birth) {
+      if (!birth) return "";
+      let d;
+      if (typeof birth === "string") d = new Date(birth);
+      else if (birth.seconds) d = new Date(birth.seconds * 1000);
+      else d = new Date(birth);
+      const today = new Date();
+      let age = today.getFullYear() - d.getFullYear();
+      const m = today.getMonth() - d.getMonth();
+      if (m < 0 || (m === 0 && today.getDate() < d.getDate())) age--;
+      return age;
+    }
+
+    const idParam = new URL(location.href).searchParams.get("id");
+    if (!idParam) {
+      console.warn("id param is missing");
+    } else {
+      try {
+        const snap = await getDoc(doc(db, "drivers", idParam));
+        if (!snap.exists()) {
+          console.warn("document not found:", idParam);
+        } else {
+          const d = snap.data();
+
+          nameEl.textContent    = d.name || "";
+          idEl.textContent      = d.driverId || idParam;
+          ageEl.textContent     = d.birthDate ? calcAge(d.birthDate) : "";
+          phoneEl.textContent   = d.phone || "";
+          orgEl.textContent     = d.organization || "";
+          licenseEl.textContent = Array.isArray(d.licenseTypes) ? d.licenseTypes.join("・") : (d.licenseTypes || "");
+
+          if (d.photoUrl) {
+            noImgText && noImgText.remove();
+            const img = document.createElement("img");
+            img.src = d.photoUrl;
+            img.alt = d.name || "driver";
+            imageArea.innerHTML = "";
+            imageArea.appendChild(img);
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+  </script>
+</body>
+</html>
+
+
